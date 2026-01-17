@@ -8,30 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultContainer = document.getElementById('result-container');
   const toast = document.getElementById('toast');
 
-  let worker = null;
-
-  // Initialize Tesseract Worker
-  async function initWorker() {
-    if (!worker) {
-      try {
-        worker = await Tesseract.createWorker('eng', 1, {
-          logger: m => {
-            console.log(m);
-            if (m.status === 'recognizing text') {
-              statusText.innerText = `Extracting: ${Math.round(m.progress * 100)}%`;
-            } else if (m.status) {
-              statusText.innerText = m.status;
-            }
-          }
-        });
-      } catch (err) {
-        console.error("Worker initialization error:", err);
-        throw new Error("Failed to initialize OCR engine");
-      }
-    }
-    return worker;
-  }
-
   // Show status
   function showStatus(msg) {
     statusText.innerText = msg;
@@ -62,25 +38,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2000);
   }
 
-  // Extract text from Image URL/Blob
+  // Extract text from Image using Tesseract
   async function performOCR(imageSource) {
     try {
-      showStatus("Initializing OCR Engine...");
+      showStatus("Initializing OCR...");
 
-      const ocr = await initWorker();
-
-      showStatus("Processing image...");
-      const { data: { text } } = await ocr.recognize(imageSource);
-
-      if (!text || text.trim() === "") {
-        showStatus("No text found in image.");
-        setTimeout(hideStatus, 3000);
-      } else {
-        showResult(text);
+      // Check if Tesseract is loaded
+      if (typeof Tesseract === 'undefined') {
+        throw new Error("Tesseract library not loaded");
       }
+
+      console.log("Starting OCR with Tesseract version:", Tesseract);
+
+      showStatus("Loading OCR engine...");
+
+      // Use the simplest possible API call
+      const result = await Tesseract.recognize(
+        imageSource,
+        'eng',
+        {
+          logger: info => {
+            console.log(info);
+            if (info.status === 'recognizing text') {
+              const progress = Math.round(info.progress * 100);
+              statusText.innerText = `Extracting text: ${progress}%`;
+            } else if (info.status) {
+              statusText.innerText = info.status.replace(/_/g, ' ');
+            }
+          }
+        }
+      );
+
+      console.log("OCR Result:", result);
+
+      if (result && result.data && result.data.text) {
+        const text = result.data.text.trim();
+        if (text) {
+          showResult(text);
+        } else {
+          showStatus("No text found in image.");
+          setTimeout(hideStatus, 3000);
+        }
+      } else {
+        throw new Error("Invalid OCR result");
+      }
+
     } catch (error) {
-      console.error("OCR Error:", error);
-      showStatus("Error: " + (error.message || "Failed to process image"));
+      console.error("OCR Error Details:", error);
+      showStatus("Error: " + error.message);
       setTimeout(hideStatus, 5000);
     }
   }
@@ -88,13 +93,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // Handle Clipboard Extraction
   extractClipboardBtn.addEventListener('click', async () => {
     try {
+      showStatus("Reading clipboard...");
       const items = await navigator.clipboard.read();
       let imageBlob = null;
 
       for (const item of items) {
+        console.log("Clipboard item types:", item.types);
         for (const type of item.types) {
           if (type.startsWith('image/')) {
             imageBlob = await item.getType(type);
+            console.log("Found image in clipboard:", type, imageBlob);
             break;
           }
         }
@@ -103,14 +111,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (imageBlob) {
         const imageUrl = URL.createObjectURL(imageBlob);
+        console.log("Created image URL:", imageUrl);
         await performOCR(imageUrl);
       } else {
         showStatus("No image found in clipboard.");
         setTimeout(hideStatus, 2000);
       }
     } catch (err) {
-      console.error("Clipboard access error:", err);
-      showStatus("Permission denied to read clipboard.");
+      console.error("Clipboard error:", err);
+      showStatus("Error: " + err.message);
       setTimeout(hideStatus, 3000);
     }
   });
@@ -121,6 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       chrome.tabs.captureVisibleTab(null, { format: 'png' }, async (dataUrl) => {
         if (chrome.runtime.lastError) {
+          console.error("Capture error:", chrome.runtime.lastError);
           showStatus("Error: " + chrome.runtime.lastError.message);
           setTimeout(hideStatus, 3000);
           return;
@@ -130,11 +140,12 @@ document.addEventListener('DOMContentLoaded', () => {
           setTimeout(hideStatus, 3000);
           return;
         }
+        console.log("Captured screen, data URL length:", dataUrl.length);
         await performOCR(dataUrl);
       });
     } catch (err) {
       console.error("Capture error:", err);
-      showStatus("Capture failed: " + err.message);
+      showStatus("Error: " + err.message);
       setTimeout(hideStatus, 3000);
     }
   });
@@ -152,6 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Check if Tesseract loaded successfully
+  console.log("Tesseract loaded:", typeof Tesseract !== 'undefined');
+
   // Proactive Clipboard Check
   async function checkClipboard() {
     try {
@@ -163,8 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     } catch (e) {
-      // Clipboard permission not granted yet
-      console.log("Clipboard check skipped:", e.message);
+      console.log("Clipboard check:", e.message);
     }
   }
 
