@@ -60,6 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
       formData.append('base64Image', base64Image);
       formData.append('language', 'eng');
       formData.append('isOverlayRequired', 'false');
+      formData.append('apikey', 'helloworld');
+      formData.append('scale', 'true');
 
       const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
         method: 'POST',
@@ -136,28 +138,43 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Handle Select Area (Capture Visible Tab)
+  // Handle Select Area (Capture Visible Tab)
   selectAreaBtn.addEventListener('click', async () => {
-    showStatus("Capturing screen...");
     try {
-      chrome.tabs.captureVisibleTab(null, { format: 'png' }, async (dataUrl) => {
-        if (chrome.runtime.lastError) {
-          console.error("Capture error:", chrome.runtime.lastError);
-          showStatus("Error: " + chrome.runtime.lastError.message);
-          setTimeout(hideStatus, 3000);
-          return;
-        }
-        if (!dataUrl) {
-          showStatus("Failed to capture screen.");
-          setTimeout(hideStatus, 3000);
-          return;
-        }
-        console.log("Screen captured");
-        await performOCR(dataUrl);
+      showStatus("Initializing selection...");
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+      if (!tab) {
+        showStatus("No active tab found.");
+        return;
+      }
+
+      // Check for restricted URLs (like chrome://)
+      if (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:')) {
+        showStatus("Cannot crop on system pages.");
+        return;
+      }
+
+      // Inject content script
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content.js']
       });
+
+      // Send start message
+      chrome.tabs.sendMessage(tab.id, { action: 'START_SELECTION' }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("Msg error:", chrome.runtime.lastError);
+          // Verify if it's just a closed connection (popup closed)
+        }
+      });
+
+      // Close popup to let user interact with page
+      window.close();
+
     } catch (err) {
-      console.error("Capture error:", err);
+      console.error("Selection init error:", err);
       showStatus("Error: " + err.message);
-      setTimeout(hideStatus, 3000);
     }
   });
 
