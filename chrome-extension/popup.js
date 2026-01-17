@@ -38,40 +38,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2000);
   }
 
-  // Extract text from Image - SIMPLIFIED APPROACH
+  // Extract text using OCR.space API (Free, no API key needed for basic use)
   async function performOCR(imageSource) {
     try {
-      console.log("Starting OCR with Tesseract.recognize...");
-      showStatus("Initializing OCR...");
+      showStatus("Preparing image...");
 
-      // Use the simplest possible Tesseract API
-      const result = await Tesseract.recognize(
-        imageSource,
-        'eng',
-        {
-          logger: function (m) {
-            console.log(m);
-            if (m.status === 'recognizing text') {
-              const progress = Math.round(m.progress * 100);
-              statusText.innerText = `Extracting: ${progress}%`;
-            } else if (m.status === 'loading tesseract core') {
-              statusText.innerText = 'Loading OCR engine...';
-            } else if (m.status === 'initializing tesseract') {
-              statusText.innerText = 'Initializing...';
-            } else if (m.status === 'loading language traineddata') {
-              statusText.innerText = 'Downloading language data...';
-            } else if (m.status === 'initializing api') {
-              statusText.innerText = 'Starting recognition...';
-            }
-          }
-        }
-      );
+      // Convert image to base64 if it's a blob URL
+      let base64Image;
+      if (imageSource.startsWith('blob:')) {
+        const response = await fetch(imageSource);
+        const blob = await response.blob();
+        base64Image = await blobToBase64(blob);
+      } else {
+        base64Image = imageSource;
+      }
 
+      showStatus("Extracting text...");
+
+      // Use OCR.space free API
+      const formData = new FormData();
+      formData.append('base64Image', base64Image);
+      formData.append('language', 'eng');
+      formData.append('isOverlayRequired', 'false');
+
+      const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await ocrResponse.json();
       console.log("OCR Result:", result);
 
-      if (result && result.data && result.data.text) {
-        const text = result.data.text.trim();
-        if (text) {
+      if (result.IsErroredOnProcessing) {
+        throw new Error(result.ErrorMessage || "OCR processing failed");
+      }
+
+      if (result.ParsedResults && result.ParsedResults.length > 0) {
+        const text = result.ParsedResults[0].ParsedText;
+        if (text && text.trim()) {
           showResult(text);
         } else {
           showStatus("No text found in image.");
@@ -86,6 +90,16 @@ document.addEventListener('DOMContentLoaded', () => {
       showStatus("Error: " + (error.message || "Processing failed"));
       setTimeout(hideStatus, 5000);
     }
+  }
+
+  // Convert blob to base64
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
   // Handle Clipboard Extraction
@@ -159,10 +173,6 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   });
-
-  // Check Tesseract loaded
-  console.log("Tesseract loaded:", typeof Tesseract !== 'undefined');
-  console.log("Tesseract.recognize available:", typeof Tesseract.recognize === 'function');
 
   // Proactive Clipboard Check
   async function checkClipboard() {
