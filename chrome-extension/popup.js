@@ -40,11 +40,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2000);
   }
 
-  // Initialize worker
+  // Initialize worker with LOCAL paths
   async function getWorker() {
     if (!worker) {
       showStatus("Initializing OCR engine...");
+
+      // Use local worker and core files
       worker = await Tesseract.createWorker('eng', 1, {
+        workerPath: chrome.runtime.getURL('worker.min.js'),
+        corePath: chrome.runtime.getURL('tesseract-core.wasm.js'),
         logger: m => {
           console.log(m);
           if (m.status === 'recognizing text') {
@@ -163,7 +167,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Check Tesseract loaded
   console.log("Tesseract loaded:", typeof Tesseract !== 'undefined');
-  console.log("Tesseract object:", Tesseract);
 
   // Proactive Clipboard Check
   async function checkClipboard() {
