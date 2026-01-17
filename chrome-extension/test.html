@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Tesseract Test</title>
+</head>
+
+<body>
+    <h1>Tesseract Loading Test</h1>
+    <div id="status">Checking...</div>
+    <script src="tesseract.min.js"></script>
+    <script>
+        const statusDiv = document.getElementById('status');
+
+        // Check if Tesseract loaded
+        if (typeof Tesseract !== 'undefined') {
+            statusDiv.innerHTML = 'Tesseract loaded successfully!<br>';
+            statusDiv.innerHTML += 'Version: ' + (Tesseract.version || 'Unknown') + '<br>';
+            statusDiv.innerHTML += 'Type: ' + typeof Tesseract + '<br>';
+            console.log('Tesseract object:', Tesseract);
+        } else {
+            statusDiv.innerHTML = 'ERROR: Tesseract NOT loaded!';
+            console.error('Tesseract is undefined');
+        }
+    </script>
+</body>
+
+</html>
