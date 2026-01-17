@@ -8,6 +8,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultContainer = document.getElementById('result-container');
   const toast = document.getElementById('toast');
 
+  let worker = null;
+
+  // Initialize Tesseract Worker
+  async function initWorker() {
+    if (!worker) {
+      try {
+        worker = await Tesseract.createWorker('eng', 1, {
+          logger: m => {
+            console.log(m);
+            if (m.status === 'recognizing text') {
+              statusText.innerText = `Extracting: ${Math.round(m.progress * 100)}%`;
+            } else if (m.status) {
+              statusText.innerText = m.status;
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Worker initialization error:", err);
+        throw new Error("Failed to initialize OCR engine");
+      }
+    }
+    return worker;
+  }
+
   // Show status
   function showStatus(msg) {
     statusText.innerText = msg;
@@ -43,16 +67,10 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       showStatus("Initializing OCR Engine...");
 
-      // Using Tesseract.recognize directly (Simplest for debugging)
-      const { data: { text } } = await Tesseract.recognize(imageSource, 'eng', {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            statusText.innerText = `Extracting: ${Math.round(m.progress * 100)}%`;
-          } else {
-            statusText.innerText = m.status;
-          }
-        }
-      });
+      const ocr = await initWorker();
+
+      showStatus("Processing image...");
+      const { data: { text } } = await ocr.recognize(imageSource);
 
       if (!text || text.trim() === "") {
         showStatus("No text found in image.");
@@ -91,28 +109,33 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(hideStatus, 2000);
       }
     } catch (err) {
-      console.error("Clipboard access denied:", err);
+      console.error("Clipboard access error:", err);
       showStatus("Permission denied to read clipboard.");
+      setTimeout(hideStatus, 3000);
     }
   });
 
-  // Handle Select Area
+  // Handle Select Area (Capture Visible Tab)
   selectAreaBtn.addEventListener('click', async () => {
     showStatus("Capturing screen...");
     try {
       chrome.tabs.captureVisibleTab(null, { format: 'png' }, async (dataUrl) => {
         if (chrome.runtime.lastError) {
-          showStatus("Error capturing tab: " + chrome.runtime.lastError.message);
+          showStatus("Error: " + chrome.runtime.lastError.message);
+          setTimeout(hideStatus, 3000);
           return;
         }
         if (!dataUrl) {
-          showStatus("Failed to capture tab.");
+          showStatus("Failed to capture screen.");
+          setTimeout(hideStatus, 3000);
           return;
         }
         await performOCR(dataUrl);
       });
     } catch (err) {
+      console.error("Capture error:", err);
       showStatus("Capture failed: " + err.message);
+      setTimeout(hideStatus, 3000);
     }
   });
 
@@ -122,6 +145,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (text) {
       navigator.clipboard.writeText(text).then(() => {
         showToast("Text copied successfully!");
+      }).catch(err => {
+        console.error("Copy failed:", err);
+        showToast("Failed to copy text");
       });
     }
   });
@@ -133,9 +159,13 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const item of items) {
         if (item.types.some(type => type.startsWith('image/'))) {
           extractClipboardBtn.classList.add('pulse');
+          break;
         }
       }
-    } catch (e) { }
+    } catch (e) {
+      // Clipboard permission not granted yet
+      console.log("Clipboard check skipped:", e.message);
+    }
   }
 
   checkClipboard();
