@@ -8,8 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultContainer = document.getElementById('result-container');
   const toast = document.getElementById('toast');
 
-  let worker = null;
-
   // Show status
   function showStatus(msg) {
     statusText.innerText = msg;
@@ -40,52 +38,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2000);
   }
 
-  // Initialize worker with LOCAL paths
-  async function getWorker() {
-    if (!worker) {
-      showStatus("Initializing OCR engine...");
-
-      // Use local worker and core files
-      worker = await Tesseract.createWorker('eng', 1, {
-        workerPath: chrome.runtime.getURL('worker.min.js'),
-        corePath: chrome.runtime.getURL('tesseract-core.wasm.js'),
-        logger: m => {
-          console.log(m);
-          if (m.status === 'recognizing text') {
-            statusText.innerText = `Recognizing: ${Math.round(m.progress * 100)}%`;
-          } else if (m.status === 'loading tesseract core') {
-            statusText.innerText = 'Loading OCR engine...';
-          } else if (m.status === 'initializing tesseract') {
-            statusText.innerText = 'Initializing...';
-          } else if (m.status === 'loading language traineddata') {
-            statusText.innerText = 'Loading language data...';
-          } else if (m.status === 'initializing api') {
-            statusText.innerText = 'Starting OCR...';
-          }
-        }
-      });
-    }
-    return worker;
-  }
-
-  // Extract text from Image
+  // Extract text from Image - SIMPLIFIED APPROACH
   async function performOCR(imageSource) {
     try {
-      console.log("Starting OCR process...");
+      console.log("Starting OCR with Tesseract.recognize...");
+      showStatus("Initializing OCR...");
 
-      const ocr = await getWorker();
+      // Use the simplest possible Tesseract API
+      const result = await Tesseract.recognize(
+        imageSource,
+        'eng',
+        {
+          logger: function (m) {
+            console.log(m);
+            if (m.status === 'recognizing text') {
+              const progress = Math.round(m.progress * 100);
+              statusText.innerText = `Extracting: ${progress}%`;
+            } else if (m.status === 'loading tesseract core') {
+              statusText.innerText = 'Loading OCR engine...';
+            } else if (m.status === 'initializing tesseract') {
+              statusText.innerText = 'Initializing...';
+            } else if (m.status === 'loading language traineddata') {
+              statusText.innerText = 'Downloading language data...';
+            } else if (m.status === 'initializing api') {
+              statusText.innerText = 'Starting recognition...';
+            }
+          }
+        }
+      );
 
-      showStatus("Processing image...");
-      const { data: { text } } = await ocr.recognize(imageSource);
+      console.log("OCR Result:", result);
 
-      console.log("OCR completed. Text:", text);
-
-      if (!text || text.trim() === "") {
-        showStatus("No text found in image.");
-        setTimeout(hideStatus, 3000);
+      if (result && result.data && result.data.text) {
+        const text = result.data.text.trim();
+        if (text) {
+          showResult(text);
+        } else {
+          showStatus("No text found in image.");
+          setTimeout(hideStatus, 3000);
+        }
       } else {
-        showResult(text);
+        throw new Error("No text extracted");
       }
+
     } catch (error) {
       console.error("OCR Error:", error);
       showStatus("Error: " + (error.message || "Processing failed"));
@@ -167,6 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Check Tesseract loaded
   console.log("Tesseract loaded:", typeof Tesseract !== 'undefined');
+  console.log("Tesseract.recognize available:", typeof Tesseract.recognize === 'function');
 
   // Proactive Clipboard Check
   async function checkClipboard() {
