@@ -1,10 +1,12 @@
 
 // Background Service Worker for Instant Text Extractor
 
-// Listen for messages from content scripts
+// Listen for messages from content scripts and popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'CAPTURE_AND_EXTRACT') {
         handleCaptureAndExtract(request.area, sender.tab.id);
+    } else if (request.action === 'EXTRACT_FROM_IMAGE') {
+        handleImageExtraction(request.imageData, request.tabId);
     }
 });
 
@@ -21,16 +23,35 @@ async function handleCaptureAndExtract(area, tabId) {
         const text = await performOCR(croppedDataUrl);
 
         // 4. Send result back to content script
-        if (text) {
-            chrome.tabs.sendMessage(tabId, { action: 'SHOW_RESULT', text: text, debugImage: croppedDataUrl });
-        } else {
-            chrome.tabs.sendMessage(tabId, { action: 'SHOW_ERROR', message: "No text found", debugImage: croppedDataUrl });
-        }
+        sendResult(tabId, text, croppedDataUrl);
 
     } catch (error) {
         console.error("Extraction failed:", error);
-        chrome.tabs.sendMessage(tabId, { action: 'SHOW_ERROR', message: error.message || "Extraction Failed", debugImage: croppedDataUrl });
+        sendError(tabId, error.message || "Extraction Failed", croppedDataUrl);
     }
+}
+
+async function handleImageExtraction(base64Image, tabId) {
+    try {
+        // Perform OCR directly on the provided image
+        const text = await performOCR(base64Image);
+        sendResult(tabId, text, base64Image);
+    } catch (error) {
+        console.error("Clipboard extraction failed:", error);
+        sendError(tabId, error.message || "Clipboard Extraction Failed", base64Image);
+    }
+}
+
+function sendResult(tabId, text, debugImage) {
+    if (text) {
+        chrome.tabs.sendMessage(tabId, { action: 'SHOW_RESULT', text: text, debugImage: debugImage });
+    } else {
+        chrome.tabs.sendMessage(tabId, { action: 'SHOW_ERROR', message: "No text found", debugImage: debugImage });
+    }
+}
+
+function sendError(tabId, message, debugImage) {
+    chrome.tabs.sendMessage(tabId, { action: 'SHOW_ERROR', message: message, debugImage: debugImage });
 }
 
 function captureTab() {
@@ -65,7 +86,6 @@ async function cropImage(dataUrl, area) {
 
         const croppedBlob = await canvas.convertToBlob({ type: 'image/png' });
 
-        // FileReader works in Service Workers
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result);
@@ -84,8 +104,8 @@ async function performOCR(base64Image) {
     formData.append('base64Image', base64Image);
     formData.append('language', 'eng');
     formData.append('isOverlayRequired', 'false');
-    formData.append('apikey', 'helloworld'); // Use free demo key
-    formData.append('scale', 'true'); // Helps with low-res or small text
+    formData.append('apikey', 'helloworld');
+    formData.append('scale', 'true');
 
     try {
         const response = await fetch('https://api.ocr.space/parse/image', {

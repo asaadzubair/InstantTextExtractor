@@ -15,7 +15,7 @@
     <div class="container">
         <header>
             <div class="logo-area">
-                <img src="icons/icon48.png" alt="Logo" class="logo">
+                <img src="icons/logo48.png" alt="Logo" class="logo">
                 <h1>Text Extractor</h1>
             </div>
             <p class="subtitle">Capture & Extract Instantly</p>
@@ -44,21 +44,7 @@
 
             <div id="status-container" class="status-container hidden">
                 <div class="spinner"></div>
-                <p id="status-text">Processing image...</p>
-            </div>
-
-            <div id="result-container" class="result-container hidden">
-                <div class="result-header">
-                    <span>Extracted Text</span>
-                    <button id="copy-text" class="btn btn-icon" title="Copy Text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                        </svg>
-                    </button>
-                </div>
-                <textarea id="output-text" readonly placeholder="Text will appear here..."></textarea>
+                <p id="status-text">Processing...</p>
             </div>
         </main>
 
@@ -66,8 +52,6 @@
             <p>Instant Text Extractor v1.0</p>
         </footer>
     </div>
-
-    <div id="toast" class="toast hidden">Text copied successfully!</div>
 
     <script src="popup.js"></script>
 </body>
