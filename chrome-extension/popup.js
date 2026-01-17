@@ -14,15 +14,22 @@ document.addEventListener('DOMContentLoaded', () => {
   async function getWorker() {
     if (!worker) {
       statusText.innerText = "Initializing OCR...";
-      worker = await Tesseract.createWorker({
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            statusText.innerText = `Extracting: ${Math.round(m.progress * 100)}%`;
+      try {
+        worker = await Tesseract.createWorker({
+          workerPath: chrome.runtime.getURL('worker.min.js'),
+          corePath: chrome.runtime.getURL('tesseract-core.wasm.js'),
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              statusText.innerText = `Extracting: ${Math.round(m.progress * 100)}%`;
+            }
           }
-        }
-      });
-      await worker.loadLanguage('eng');
-      await worker.initialize('eng');
+        });
+        await worker.loadLanguage('eng');
+        await worker.initialize('eng');
+      } catch (err) {
+        console.error("Worker Init Error:", err);
+        throw err;
+      }
     }
     return worker;
   }
@@ -63,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showStatus("Starting OCR...");
       const tesseractWorker = await getWorker();
       const { data: { text } } = await tesseractWorker.recognize(imageSource);
-      
+
       if (!text || text.trim() === "") {
         showStatus("No text found in image.");
         setTimeout(hideStatus, 2000);
@@ -145,8 +152,8 @@ document.addEventListener('DOMContentLoaded', () => {
           extractClipboardBtn.classList.add('pulse');
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }
-  
+
   checkClipboard();
 });
