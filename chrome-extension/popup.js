@@ -8,32 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultContainer = document.getElementById('result-container');
   const toast = document.getElementById('toast');
 
-  let worker = null;
-
-  // Initialize Tesseract Worker
-  async function getWorker() {
-    if (!worker) {
-      statusText.innerText = "Initializing OCR...";
-      try {
-        worker = await Tesseract.createWorker({
-          workerPath: chrome.runtime.getURL('worker.min.js'),
-          corePath: chrome.runtime.getURL('tesseract-core.wasm.js'),
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              statusText.innerText = `Extracting: ${Math.round(m.progress * 100)}%`;
-            }
-          }
-        });
-        await worker.loadLanguage('eng');
-        await worker.initialize('eng');
-      } catch (err) {
-        console.error("Worker Init Error:", err);
-        throw err;
-      }
-    }
-    return worker;
-  }
-
   // Show status
   function showStatus(msg) {
     statusText.innerText = msg;
@@ -67,20 +41,29 @@ document.addEventListener('DOMContentLoaded', () => {
   // Extract text from Image URL/Blob
   async function performOCR(imageSource) {
     try {
-      showStatus("Starting OCR...");
-      const tesseractWorker = await getWorker();
-      const { data: { text } } = await tesseractWorker.recognize(imageSource);
+      showStatus("Initializing OCR Engine...");
+
+      // Using Tesseract.recognize directly (Simplest for debugging)
+      const { data: { text } } = await Tesseract.recognize(imageSource, 'eng', {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            statusText.innerText = `Extracting: ${Math.round(m.progress * 100)}%`;
+          } else {
+            statusText.innerText = m.status;
+          }
+        }
+      });
 
       if (!text || text.trim() === "") {
         showStatus("No text found in image.");
-        setTimeout(hideStatus, 2000);
+        setTimeout(hideStatus, 3000);
       } else {
         showResult(text);
       }
     } catch (error) {
       console.error("OCR Error:", error);
-      showStatus("Error extracting text.");
-      setTimeout(hideStatus, 3000);
+      showStatus("Error: " + (error.message || "Failed to process image"));
+      setTimeout(hideStatus, 5000);
     }
   }
 
@@ -113,21 +96,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Handle Select Area (Capture Visible Tab for now)
+  // Handle Select Area
   selectAreaBtn.addEventListener('click', async () => {
     showStatus("Capturing screen...");
     try {
-      // In a real extension, you'd inject a content script to allow selection.
-      // For this student project, we'll capture the visible tab as a "snippet".
       chrome.tabs.captureVisibleTab(null, { format: 'png' }, async (dataUrl) => {
         if (chrome.runtime.lastError) {
-          showStatus("Error capturing tab.");
+          showStatus("Error capturing tab: " + chrome.runtime.lastError.message);
+          return;
+        }
+        if (!dataUrl) {
+          showStatus("Failed to capture tab.");
           return;
         }
         await performOCR(dataUrl);
       });
     } catch (err) {
-      showStatus("Capture failed.");
+      showStatus("Capture failed: " + err.message);
     }
   });
 
@@ -141,14 +126,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Proactive Clipboard Check on Open
+  // Proactive Clipboard Check
   async function checkClipboard() {
     try {
       const items = await navigator.clipboard.read();
       for (const item of items) {
         if (item.types.some(type => type.startsWith('image/'))) {
-          // If we find an image, maybe show a hint or auto-start?
-          // For now, let's just make the button pulse or something.
           extractClipboardBtn.classList.add('pulse');
         }
       }

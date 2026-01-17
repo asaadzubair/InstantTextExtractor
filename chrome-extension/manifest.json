@@ -10,7 +10,7 @@
         "scripting"
     ],
     "content_security_policy": {
-        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval' https://unpkg.com; object-src 'self'; worker-src 'self' blob:; connect-src https://*.projectnaptha.com https://unpkg.com;"
     },
     "action": {
         "default_popup": "popup.html",
